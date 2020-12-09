@@ -66,7 +66,9 @@ func main() {
 		Addr:    addr,
 		Handler: r,
 	}
-	go start2svc(r)
+	go start8081svc(r)
+	go start443svc(r)
+	go start80svc(r)
 	go func() {
 		logger.Slog.Infof("http listen to %v, pid is %v", addr, os.Getpid())
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -76,8 +78,38 @@ func main() {
 	httputil.SetupGracefulStop(srv)
 }
 
-func start2svc(e *gin.Engine) {
+func start8081svc(e *gin.Engine) {
 	addr := ":8081"
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: e,
+	}
+	go func() {
+		logger.Slog.Infof("http listen to %v, pid is %v", addr, os.Getpid())
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Slog.Fatal(err)
+		}
+	}()
+	httputil.SetupGracefulStop(srv)
+}
+
+func start80svc(e *gin.Engine) {
+	addr := ":80"
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: e,
+	}
+	go func() {
+		logger.Slog.Infof("http listen to %v, pid is %v", addr, os.Getpid())
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Slog.Fatal(err)
+		}
+	}()
+	httputil.SetupGracefulStop(srv)
+}
+
+func start443svc(e *gin.Engine) {
+	addr := ":443"
 	srv := &http.Server{
 		Addr:    addr,
 		Handler: e,
