@@ -1,12 +1,12 @@
-FROM registry.cn-beijing.aliyuncs.com/k7scn/goa as build
+FROM ysicing/god as build
 
 COPY . /go/src
 
 WORKDIR /go/src
 
-RUN go build
+RUN GOOS=linux GOARCH=amd64 go build -o godemo
 
-FROM registry.cn-beijing.aliyuncs.com/k7scn/alpine
+FROM ysicing/debian
 
 COPY --from=build /go/src/godemo /usr/bin/godemo
 

@@ -6,119 +6,65 @@ import (
 	"os"
 	"time"
 
+	"github.com/ergoapi/util/environ"
+	"github.com/ergoapi/util/exgin"
+	"github.com/ergoapi/util/exhttp"
 	"github.com/gin-gonic/gin"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/ysicing/ext/e"
-	"github.com/ysicing/ext/ginmid"
-	"github.com/ysicing/ext/httputil"
-	"github.com/ysicing/ext/logger"
-)
-
-var (
-	reqCounter = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "default_req_counter",
-		Help: "访问统计",
-	})
+	"github.com/sirupsen/logrus"
 )
 
 func init() {
-	logcfg := logger.Config{Simple: true, ConsoleOnly: true}
-	logger.InitLogger(&logcfg)
-	prometheus.MustRegister(reqCounter)
-}
-
-func prom() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		reqCounter.Inc()
-		c.Next()
-	}
+	logrus.SetLevel(logrus.DebugLevel)
+	logrus.SetFormatter(&logrus.JSONFormatter{})
 }
 
 func main() {
-	gin.SetMode(gin.DebugMode)
-	gin.DisableConsoleColor()
-	r := gin.New()
-	r.Use(ginmid.RequestID(), ginmid.Log(), prom())
+	g := exgin.Init(&exgin.Config{
+		Debug:   true,
+		Cors:    true,
+		Metrics: true,
+	})
+	g.Use(exgin.ExLog(), exgin.ExRecovery(), exgin.ExTraceID())
 
 	// Example ping request.
-	r.GET("/healthz", func(c *gin.Context) {
+	g.GET("/healthz", func(c *gin.Context) {
 		c.String(http.StatusOK, "pong "+fmt.Sprint(time.Now().Unix()))
 	})
 
 	// Example / request.
-	r.GET("/", func(c *gin.Context) {
-		c.JSON(200, e.Done(map[string]interface{}{
+	g.GET("/", func(c *gin.Context) {
+		exgin.GinsData(c, map[string]interface{}{
 			"message": "power by godemo",
-			"id":      ginmid.GetRequestID(c),
 			"method":  c.Request.Method,
 			"url":     c.Request.Host,
 			"client":  c.ClientIP(),
 			"ua":      c.Request.UserAgent(),
-		}))
+		}, nil)
 	})
 
-	// Example /metrics
-	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	g.GET("/:id", func(c *gin.Context) {
+		id := exgin.GinsParamStr(c, "id")
+		exgin.GinsData(c, map[string]interface{}{
+			"message": fmt.Sprintf("power by %s", id),
+			"method":  c.Request.Method,
+			"url":     c.Request.Host,
+			"ns":      environ.GetEnv("NAMESPACE", "default"),
+			"client":  c.ClientIP(),
+			"ua":      c.Request.UserAgent(),
+		}, nil)
+	})
 
 	addr := ":8080"
 	srv := &http.Server{
 		Addr:    addr,
-		Handler: r,
+		Handler: g,
 	}
-	go start8081svc(r)
-	go start443svc(r)
-	go start80svc(r)
-	go func() {
-		logger.Slog.Infof("http listen to %v, pid is %v", addr, os.Getpid())
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Slog.Fatal(err)
-		}
-	}()
-	httputil.SetupGracefulStop(srv)
-}
 
-func start8081svc(e *gin.Engine) {
-	addr := ":8081"
-	srv := &http.Server{
-		Addr:    addr,
-		Handler: e,
-	}
 	go func() {
-		logger.Slog.Infof("http listen to %v, pid is %v", addr, os.Getpid())
+		logrus.Infof("http listen to %v, pid is %v", addr, os.Getpid())
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Slog.Fatal(err)
+			logrus.Fatal(err)
 		}
 	}()
-	httputil.SetupGracefulStop(srv)
-}
-
-func start80svc(e *gin.Engine) {
-	addr := ":80"
-	srv := &http.Server{
-		Addr:    addr,
-		Handler: e,
-	}
-	go func() {
-		logger.Slog.Infof("http listen to %v, pid is %v", addr, os.Getpid())
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Slog.Fatal(err)
-		}
-	}()
-	httputil.SetupGracefulStop(srv)
-}
-
-func start443svc(e *gin.Engine) {
-	addr := ":443"
-	srv := &http.Server{
-		Addr:    addr,
-		Handler: e,
-	}
-	go func() {
-		logger.Slog.Infof("http listen to %v, pid is %v", addr, os.Getpid())
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Slog.Fatal(err)
-		}
-	}()
-	httputil.SetupGracefulStop(srv)
+	exhttp.SetupGracefulStop(srv)
 }
